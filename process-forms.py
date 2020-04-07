@@ -7,7 +7,7 @@ import os
 import pandas as pd
 
 import config
-from processors import Edgar
+import processors
 import utils
 
 parser = argparse.ArgumentParser('Collect executives\' movements of securities into pandas dataframe')
@@ -62,7 +62,7 @@ content = utils.get_and_check_URL(make_url('index.json'), to_json=True)
 
 checked_urls = []
 
-if edgar_df is not None:
+if len(edgar_df):
     checked_urls = edgar_df['url'].to_list()
 
 # Autosave after every five documents
@@ -88,7 +88,7 @@ for filing_number in (x['name'] for x in content['directory']['item']):
         continue
 
     try:
-        edgar = Edgar(url)
+        edgar = processors.Edgar(url)
     except Exception:
         continue
 
