@@ -14,10 +14,10 @@ class Edgar(object):
         self.doc_type = None
         self.name = None
         self.characteristics = {
-            'isDirector': None,
-            'isOfficer': None,
-            'isTenPercentOwner': None,
-            'isOther': None,
+            'isDirector': False,
+            'isOfficer': False,
+            'isTenPercentOwner': False,
+            'isOther': False,
         }
         self.holdings = []
         self.transactions = []
@@ -50,7 +50,9 @@ class Edgar(object):
         self.name = owner.find('reportingOwnerId/rptOwnerName').text
         owner_types = owner.find('reportingOwnerRelationship')
         for c in self.characteristics:
-            self.characteristics[c] = owner_types.find(c).text == '1'
+            owner_char = owner_types.find(c)
+            if owner_char is not None:
+                self.characteristics[c] = owner_types.text == '1'
 
         # Get information about the stocks
         for t_elem in data.findall('nonDerivativeTable/nonDerivativeTransaction'):
