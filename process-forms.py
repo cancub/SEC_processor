@@ -30,6 +30,10 @@ def load_company_data():
     print('Continuing with previously-saved data to collect new datapoints.')
     edgar_df = pd.read_pickle(COMPANY_PATH)
 
+def save_edgar():
+    edgar_df.sort_values(by=['date','owner'], inplace=True, ignore_index=True)
+    edgar_df.to_pickle(COMPANY_PATH)
+
 if os.path.exists(COMPANY_PATH):
     if args.load:
         load_company_data()
@@ -103,9 +107,10 @@ for filing_number in (x['name'] for x in content['directory']['item']):
 
     periodic_save -= 1
     if periodic_save == 0:
+        # save, just in case the next call fails
+        save_edgar()
+        # reset the count
         periodic_save = 5
 
-        edgar_df.sort_values(by=['date','owner'], inplace=True, ignore_index=True)
-
-        # Save, just in case the next element fails
-        edgar_df.to_pickle(COMPANY_PATH)
+# save whatever has yet to be saved
+save_edgar()
