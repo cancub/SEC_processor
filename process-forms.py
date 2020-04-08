@@ -5,10 +5,14 @@ from bs4 import BeautifulSoup
 import datetime
 import os
 import pandas as pd
+import sys
 
 import config
 import processors
 import utils
+
+if sys.version_info[0] < 3:
+    raise Exception("Python 3 or a more recent version is required.")
 
 parser = argparse.ArgumentParser('Collect executives\' movements of securities into pandas dataframe')
 parser.add_argument('ticker', help='Ticker for the company to check')
