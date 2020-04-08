@@ -157,6 +157,9 @@ class Transaction(Holding):
             xml_node.find('transactionDate/value').text, '%Y-%m-%d')
         amounts = xml_node.find('transactionAmounts')
         self.amount = float(amounts.find('transactionShares/value').text)
-        self.price = float(amounts.find('transactionPricePerShare/value').text)
+        price = amounts.find('transactionPricePerShare/value')
+        if price is not None:
+            # price is nice to have, but not necessary
+            self.price = float(price.text)
         self.transaction_type = amounts.find(
             'transactionAcquiredDisposedCode/value').text
