@@ -89,7 +89,7 @@ for filing_number in (x['name'] for x in content['directory']['item']):
 
     try:
         edgar = processors.Edgar(url)
-    except Exception:
+    except processors.EdgarException:
         continue
 
     new_data = edgar.build_updates_list()

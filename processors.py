@@ -4,6 +4,9 @@ from xml.etree import ElementTree as ET
 
 import utils
 
+class EdgarException(Exception):
+    pass
+
 class Edgar(object):
     def __init__(self, url = None):
         self.url = None
@@ -33,7 +36,7 @@ class Edgar(object):
 
         data = ET.fromstring(r.content)
         if data.tag != 'ownershipDocument':
-            raise Exception('No Edgar stock information found')
+            raise EdgarException('No Edgar stock information found')
 
         self.url = url
 
