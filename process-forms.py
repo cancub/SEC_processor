@@ -17,7 +17,6 @@ import utils
 parser = argparse.ArgumentParser('Collect executives\' movements of securities into pandas dataframe')
 parser.add_argument('ticker', help='Ticker for the company to check')
 parser.add_argument('-l', '--load', action='store_true', help='Attempt to load previously-saved data')
-parser.add_argument('-t', '--threads', type=int, default=config.NUM_THREADS, help='Number of threads to use')
 args = parser.parse_args()
 
 TICKER = args.ticker.upper()
@@ -25,6 +24,11 @@ COMPANY_PATH = os.path.join(os.getcwd(),config.STORAGE, TICKER)
 edgar_df = pd.DataFrame(
     columns=['owner', 'url', 'total', 'isDirector', 'isOfficer',
              'isTenPercentOwner', 'isOther', 'date'])
+
+# The SEC has a limit to the number of requests one can make per second. Use
+# this value and a safety factor to not go over the limit
+eggtimer = util.EggTimer(
+    (1.0 + config.SAFETY_FACTOR) / config.REQUESTS_PER_SECOND)
 
 def load_company_data():
     global edgar_df
@@ -69,61 +73,67 @@ checked_urls = []
 if len(edgar_df):
     checked_urls = edgar_df['url'].to_list()
 
-# These two objects will be accessed by the threads as input and output, respecively
-leads_packet = utils.Leads([x['name'] for x in content['directory']['item']])
+leads_packet = [x['name'] for x in content['directory']['item']]
 edgar_df_ts = utils.ThreadSafeDataFrame(edgar_df, COMPANY_PATH, config.SAVE_PERIOD)
 
-def edgar_reader(cabinet, df):
+def edgar_gofer(filing_number):
 
-    while True:
-        filing_number = leads_packet.get()
+    # get the list of documents we can read for this item
+    index = utils.get_and_check_URL(
+        make_url([filing_number, 'index.json']), to_json=True)
 
-        if filing_number == -1:
-            break
+    # Find the xml
+    xml_filename = next( (item['name'] for item in index['directory']['item']
+                                    if item['name'].endswith('xml')), None)
 
-        # get the list of documents we can read for this item
-        index =  utils.get_and_check_URL(make_url([filing_number, 'index.json']), to_json=True)
+    # There must be an xml to parse xml
+    if xml_filename is None:
+        return
 
-        # Find the xml
-        xml_filename = next( (item['name'] for item in index['directory']['item']
-                                        if item['name'].endswith('xml')), None)
+    url = make_url([filing_number, xml_filename])
 
-        # There must be an xml to parse xml
-        if xml_filename is None:
-            continue
+    # skip urls that we've already parsed
+    if url in checked_urls:
+        print('+0 (ALREADY IN DATAFRAME) for {}'.format(url))
+        return
 
-        url = make_url([filing_number, xml_filename])
+    response = url_getter.get(url)
 
-        # skip urls that we've already parsed
-        if url in checked_urls:
-            print('+0 (ALREADY IN DATAFRAME) for {}'.format(url))
-            continue
+    try:
+        edgar = processors.Edgar(response.content)
+    except processors.EdgarException:
+        print('+0 (UNKNOWN SCHEMA, LIKELY NOT FORM 4) for {}'.format(url))
+        return
 
-        try:
-            edgar = processors.Edgar(url)
-        except processors.EdgarException:
-            print('+0 (UNKNOWN SCHEMA, LIKELY NOT FORM 4) for {}'.format(url))
-            continue
+    new_data = edgar.build_updates_list()
+    data_count = len(new_data)
+    print('+{} for {}'.format(data_count,url))
 
-        new_data = edgar.build_updates_list()
-        data_count = len(new_data)
-        print('+{} for {}'.format(data_count,url))
-
-        if data_count != 0:
-            df.add(new_data)
+    if data_count != 0:
+        edgar_df_ts.add(new_data)
 
 threads = []
 
-for index in range(args.threads):
-    print("Main    : create and start thread {}.".format(index))
-    x = threading.Thread(target=edgar_reader, args=(leads_packet, edgar_df_ts,))
-    threads.append(x)
-    x.start()
+while len(leads_packet) > 0:
+    import pdb; pdb.set_trace()
 
-for index, thread in enumerate(threads):
-    print("Main    : before joining thread {}.".format(index))
-    thread.join()
-    print("Main    : thread {} done".format(index))
+    # check to see if we can send another thread out
+    for index, thread in enumerate(threads):
+        thread.join(eggtimer.time_left())
+        if thread.isAlive():
+            # We timed out, which means we can go send off another thread
+            break
+        # we can get rid of the thread now
+        del a[0]
+    if eggtimer.time_left() == 0.0:
+        # start a new thread and add it to the list
+        x = threading.Thread(target=edgar_gofer, args=(leads_packet.pop(0),))
+        threads.append(x)
+        # And (re) start the eggtimers
+        eggtimer.start()
+    elif len(threads) == 0:
+        # We have no more threads to join, so we just wait
+        eggtimer.wait()
 
 # save whatever has yet to be saved
 edgar_df_ts.save()

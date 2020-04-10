@@ -1,8 +1,8 @@
-from collections import deque
 import json
 import pandas as pd
 import requests
 import threading
+import time
 
 import config
 
@@ -14,22 +14,6 @@ def get_and_check_URL(url, to_json=False):
     if to_json:
         r = json.loads(r.content)
     return r
-
-class Leads(object):
-
-    def __init__(self, urls = []):
-        self._urls = deque(urls)
-        self._lock = threading.Lock()
-
-    def get(self):
-        self._lock.acquire()
-        if len(self._urls) == 0:
-            # Signify that we're empty
-            value = -1
-        else:
-            value = self._urls.popleft()
-        self._lock.release()
-        return value
 
 class ThreadSafeDataFrame(object):
     def __init__(self, df, filename = None, period = 1):
@@ -70,3 +54,16 @@ class ThreadSafeDataFrame(object):
         if not locked:
             self._lock.release()
 
+class EggTimer(object):
+    def __init__(self, milliseconds_to_wait):
+        self._wait = milliseconds_to_wait
+        self._start = 0.0
+
+    def start(self):
+        self._start = time.time()
+
+    def time_left(self):
+        return max(self._wait - (time.time() - self._start), 0.0)
+
+    def wait(self):
+        time.sleep(self.time_left())
