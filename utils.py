@@ -38,7 +38,8 @@ class ThreadSafeDataFrame(object):
         self._filename = filename
         if not isinstance(period, int):
             raise TypeError(
-                'period must be an int, got {}'.format(period.__class__.__name__))
+                'period must be an int, got {}'.format(
+                    period.__class__.__name__))
         self._period = period
         self._countdown = period
 
@@ -63,9 +64,9 @@ class ThreadSafeDataFrame(object):
 
         if not locked:
             self._lock.acquire()
-        self._df.sort_values(by=['date','owner'], inplace=True, ignore_index=True)
+        self._df.sort_values(
+            by=['date','owner'], inplace=True, ignore_index=True)
         self._df.to_pickle(self._filename)
         if not locked:
             self._lock.release()
-
 
