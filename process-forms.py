@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import datetime
 import os
 import pandas as pd
+import queue
 import threading
 
 import config
@@ -27,7 +28,7 @@ edgar_df = pd.DataFrame(
 
 # The SEC has a limit to the number of requests one can make per second. Use
 # this value and a safety factor to not go over the limit
-eggtimer = util.EggTimer(
+eggtimer = utils.EggTimer(
     (1.0 + config.SAFETY_FACTOR) / config.REQUESTS_PER_SECOND)
 
 def load_company_data():
@@ -48,10 +49,12 @@ if os.path.exists(COMPANY_PATH):
             load_company_data()
 
 # Find the CIK from the ticker
+eggtimer.wait()
 soup = BeautifulSoup(
     utils.get_and_check_URL('https://sec.report/Ticker/' + TICKER).content,
     'html.parser'
 )
+eggtimer.start()
 page_header = soup.find(class_='jumbotron')
 cik = str.lstrip(page_header.find('h2').text.split()[2], '0')
 company_name = page_header.find('h1').text
@@ -67,73 +70,102 @@ def make_url(components):
     return base_url + '/'.join(components)
 
 # Get the filings and request that they be decoded into a dict
+eggtimer.wait()
 content = utils.get_and_check_URL(make_url('index.json'), to_json=True)
+eggtimer.start()
 
 checked_urls = []
 if len(edgar_df):
     checked_urls = edgar_df['url'].to_list()
 
-leads_packet = [x['name'] for x in content['directory']['item']]
 edgar_df_ts = utils.ThreadSafeDataFrame(edgar_df, COMPANY_PATH, config.SAVE_PERIOD)
-
-def edgar_gofer(filing_number):
-
-    # get the list of documents we can read for this item
-    index = utils.get_and_check_URL(
-        make_url([filing_number, 'index.json']), to_json=True)
-
-    # Find the xml
-    xml_filename = next( (item['name'] for item in index['directory']['item']
-                                    if item['name'].endswith('xml')), None)
-
-    # There must be an xml to parse xml
-    if xml_filename is None:
-        return
-
-    url = make_url([filing_number, xml_filename])
-
-    # skip urls that we've already parsed
-    if url in checked_urls:
-        print('+0 (ALREADY IN DATAFRAME) for {}'.format(url))
-        return
-
-    response = url_getter.get(url)
-
-    try:
-        edgar = processors.Edgar(response.content)
-    except processors.EdgarException:
-        print('+0 (UNKNOWN SCHEMA, LIKELY NOT FORM 4) for {}'.format(url))
-        return
-
-    new_data = edgar.build_updates_list()
-    data_count = len(new_data)
-    print('+{} for {}'.format(data_count,url))
-
-    if data_count != 0:
-        edgar_df_ts.add(new_data)
-
+# The filings Queue to draw from in order to get the leads
+filings = queue.Queue()
+for f in content['directory']['item']:
+    filings.put(f['name'])
+# The Queue of leas to potential xml files
+xml_leads = queue.Queue()
 threads = []
 
-while len(leads_packet) > 0:
-    import pdb; pdb.set_trace()
+def edgar_gofer():
 
-    # check to see if we can send another thread out
+    # We start off by figuring out what our jobs is
+    lead = None
+    try:
+        lead = xml_leads.get(block=False)
+    except queue.Empty:
+        pass
+
+    if lead is None:
+        # There are no leads. Well, then by golly we better make ourselves
+        # useful and get one
+        try:
+            filing_number = filings.get(block=False)
+        except queue.Empty:
+            # Oh, I guess there's nothing left to search for
+            return
+
+        # get the list of documents we can read for this item
+        index = utils.get_and_check_URL(
+            make_url([filing_number, 'index.json']), to_json=True)
+
+        # Find the xml
+        xml_filename = next( (item['name'] for item in index['directory']['item']
+                                        if item['name'].endswith('xml')), None)
+
+        # There must be an xml to parse xml
+        if xml_filename is None:
+            return
+
+        url = make_url([filing_number, xml_filename])
+
+        # skip urls that we've already parsed
+        if url in checked_urls:
+            print('+0 (ALREADY IN DATAFRAME) for {}'.format(url))
+            return
+
+        # This is a genuine grade-A lead, so add it to the pile
+        xml_leads.put(url)
+
+    else:
+        # Nice! We've got a lead. What are we waiting for? Let's check it out
+        try:
+            edgar = processors.Edgar(lead)
+        except processors.EdgarException:
+            print('+0 (UNKNOWN SCHEMA, LIKELY NOT FORM 4) for {}'.format(lead))
+            return
+
+        new_data = edgar.build_updates_list()
+        data_count = len(new_data)
+        print('+{} for {}'.format(data_count,lead))
+
+        # Hot damn! We got one. Add it to the thread-safe dataframe
+        if data_count != 0:
+            edgar_df_ts.add(new_data)
+
+while not filings.empty() or not xml_leads.empty():
+
+    # Make sure we can send the next gofer out
+    eggtimer.wait()
+
+    # Start a new thread and add it to the list
+    x = threading.Thread(target=edgar_gofer)
+    x.start()
+    threads.append(x)
+
+    # (Re)start the eggtimer
+    eggtimer.start()
+
+    # Attempt to clean up some threads while we wait
     for index, thread in enumerate(threads):
         thread.join(eggtimer.time_left())
         if thread.isAlive():
             # We timed out, which means we can go send off another thread
             break
         # we can get rid of the thread now
-        del a[0]
-    if eggtimer.time_left() == 0.0:
-        # start a new thread and add it to the list
-        x = threading.Thread(target=edgar_gofer, args=(leads_packet.pop(0),))
-        threads.append(x)
-        # And (re) start the eggtimers
-        eggtimer.start()
-    elif len(threads) == 0:
-        # We have no more threads to join, so we just wait
-        eggtimer.wait()
+        del threads[0]
+
+print('Finished searching. Saving DataFrame')
 
 # save whatever has yet to be saved
 edgar_df_ts.save()
