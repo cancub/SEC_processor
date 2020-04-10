@@ -36,9 +36,9 @@ class ThreadSafeDataFrame(object):
         if self._filename is not None:
             self._countdown -= 1
             if self._countdown == 0:
+                print('Autosaving DataFrame.')
                 self.save(locked = True)
                 self._countdown = self._period
-            print('Saving in {}'.format(self._countdown))
 
         self._lock.release()
 
