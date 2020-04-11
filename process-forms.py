@@ -154,21 +154,25 @@ while not filings.empty() or not xml_leads.empty():
     eggtimer.wait()
 
     # Start a new thread and add it to the list
-    x = threading.Thread(target=edgar_gofer)
-    x.start()
-    threads.append(x)
+    t = threading.Thread(target=edgar_gofer)
+    t.start()
+    threads.append(t)
 
     # (Re)start the eggtimer
     eggtimer.start()
 
     # Attempt to clean up some threads while we wait
-    for index, thread in enumerate(threads):
-        thread.join(eggtimer.time_left())
-        if thread.isAlive():
+    for t in threads:
+        t.join(eggtimer.time_left())
+        if t.isAlive():
             # We timed out, which means we can go send off another thread
             break
         # we can get rid of the thread now
         del threads[0]
+
+# Wait for any straggler threads
+for t in threads:
+    t.join()
 
 print('Finished searching. Saving DataFrame')
 
