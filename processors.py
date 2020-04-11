@@ -4,6 +4,13 @@ from xml.etree import ElementTree as ET
 
 import utils
 
+'''
+TODO: figure out these cases:
+https://www.sec.gov/Archives/edgar/data/320193/000032019320000031/wf-form4_158293272634137.xml
+https://www.sec.gov/Archives/edgar/data/1045810/000120919109028764/doc4.xml
+'''
+
+
 class EdgarException(Exception):
     pass
 
@@ -76,6 +83,7 @@ class Edgar(object):
         base_holdings_count = {
             'owner': self.name,
             'url': self.url,
+            'doc_type': self.doc_type,
             'total': static_holdings_total,
         }
         base_holdings_count.update(self.characteristics)
@@ -110,6 +118,9 @@ class Edgar(object):
 
         elif self.doc_type == '4/A':
             # TODO: deal with whatever the hell this is
+            pass
+        elif self.doc_type == '5':
+            # TODO: samesies
             pass
 
         return result
