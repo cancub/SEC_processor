@@ -135,7 +135,12 @@ def edgar_gofer():
             print('+0 (UNKNOWN SCHEMA, LIKELY NOT FORM 4) for {}'.format(lead))
             return
 
-        new_data = edgar.build_updates_list()
+        try:
+            new_data = edgar.build_updates_list()
+        except processors.EdgarException as e:
+            print('+0 ({}) for {}'.format(e, lead))
+            return
+
         data_count = len(new_data)
         print('+{} for {}'.format(data_count,lead))
 

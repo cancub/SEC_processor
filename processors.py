@@ -61,7 +61,13 @@ class Edgar(object):
             self.holdings.append(Holding(h_elem))
 
     def build_updates_list(self):
+        # Rarely, we'll get an empty document. Just raise an exception to signal
+        # that we should chuck this file and move along
+        if len(self.holdings + self.transactions) == 0:
+            raise EdgarException('No transactions or holdings located')
+
         result = []
+
         # Get the total of all of the ownership types that did not change in this
         # document (i.e., they are there for reference)
         static_holdings_total = sum((x.current_quantity for x in self.holdings))
