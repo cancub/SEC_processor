@@ -49,7 +49,7 @@ class ThreadSafeDataFrame(object):
         if not locked:
             self._lock.acquire()
         self._df.sort_values(
-            by=['date','owner'], inplace=True, ignore_index=True)
+            by=['date','owner','doc_type'], inplace=True, ignore_index=True)
         self._df.to_pickle(self._filename)
         if not locked:
             self._lock.release()
