@@ -59,7 +59,7 @@ class Edgar(object):
         for c in self.characteristics:
             owner_char = owner_types.find(c)
             if owner_char is not None:
-                self.characteristics[c] = owner_types.text == '1'
+                self.characteristics[c] = owner_char.text.lower() in ('1','true')
 
         # Get information about the stocks
         for t_elem in data.findall('nonDerivativeTable/nonDerivativeTransaction'):
