@@ -15,9 +15,14 @@ import config
 import processors
 import utils
 
-parser = argparse.ArgumentParser('Collect executives\' movements of securities into pandas dataframe')
+parser = argparse.ArgumentParser(
+    'Collect executives\' movements of securities into pandas dataframe')
+
 parser.add_argument('ticker', help='Ticker for the company to check')
-parser.add_argument('-l', '--load', action='store_true', help='Attempt to load previously-saved data')
+parser.add_argument('-l', '--load', action='store_true',
+        help='Attempt to load previously-saved data')
+parser.add_argument('-s', '--singlethreaded', action='store_true',
+        help='Use singlethreading rather than multithreading')
 args = parser.parse_args()
 
 TICKER = args.ticker.upper()
@@ -153,26 +158,31 @@ while not filings.empty() or not xml_leads.empty():
     # Make sure we can send the next gofer out
     eggtimer.wait()
 
-    # Start a new thread and add it to the list
-    t = threading.Thread(target=edgar_gofer)
-    t.start()
-    threads.append(t)
+    if not args.singlethreaded:
+        # Start a new thread and add it to the list
+        t = threading.Thread(target=edgar_gofer)
+        t.start()
+        threads.append(t)
+    else:
+        edgar_gofer()
 
     # (Re)start the eggtimer
     eggtimer.start()
 
-    # Attempt to clean up some threads while we wait
-    for t in threads:
-        t.join(eggtimer.time_left())
-        if t.isAlive():
-            # We timed out, which means we can go send off another thread
-            break
-        # we can get rid of the thread now
-        del threads[0]
+    if not args.singlethreaded:
+        # Attempt to clean up some threads while we wait
+        for t in threads:
+            t.join(eggtimer.time_left())
+            if t.isAlive():
+                # We timed out, which means we can go send off another thread
+                break
+            # we can get rid of the thread now
+            del threads[0]
 
-# Wait for any straggler threads
-for t in threads:
-    t.join()
+if not args.singlethreaded:
+    # Wait for any straggler threads
+    for t in threads:
+        t.join()
 
 print('Finished searching. Saving DataFrame')
 
