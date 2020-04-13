@@ -50,7 +50,7 @@ class Edgar(object):
         self.doc_type = data.find('documentType').text
 
         self.report_date = datetime.strptime(
-            data.find('periodOfReport').text, '%Y-%m-%d')
+            data.find('periodOfReport').text, '%Y-%m-%d').date()
         
         # Get information about the owner
         owner = data.find('reportingOwner')
@@ -171,7 +171,7 @@ class Transaction(Holding):
             raise TypeError('Cannot work with {} elements'.format(xml_node.tag))
 
         self.date = datetime.strptime(
-            xml_node.find('transactionDate/value').text, '%Y-%m-%d')
+            xml_node.find('transactionDate/value').text, '%Y-%m-%d').date()
         amounts = xml_node.find('transactionAmounts')
         self.amount = float(amounts.find('transactionShares/value').text)
         price = amounts.find('transactionPricePerShare/value')
